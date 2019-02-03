@@ -1,0 +1,409 @@
+MPI standard
+MPI - 1992 : Standardization of message passing into MPI
+            More than 60 people from 40 organizations involved. Point to 
+            point, blocking collective communications.
+            One-sided communication, I/O, creation of processes...
+MPI-2 - 1998: FORTRAN and C++ wrappers(C++ is now deprecated)
+MPI-3 - 2012: Non-blocking collective communication
+-----------------------------------------------------------------------
+
+* MPI is simply a C library, we only need to link it to the main program
+* MPI usually provides a wrapper mpic++ with compiler flags
+OpenMPI:
+> mpic++ -showme
+
+* Wrapper to launch multiple processes at once: mpiexec or mpirun
+> mpic++ main.cpp -o main
+> mpiexec -n 3 main
+
+> mpiexec -n 2 echo "hello world"
+
+------------------------------------------------------------------------
+
+* MPI_COMM_WORLD is the comunicator for all processes; defined after MPI_Init is called
+* All MPI routine involving communications require a communicator object of type MPI_Comm
+
+-------------------------------------------------------------------------
+Point-to-Point communication
+
+---------------------------------------------------------------------------
+|                Envelope                    |          Body              |
+---------------------------------------------------------------------------
+|   source|   destination|  communicator| tag|  count|  datatype|   buffer|
+---------------------------------------------------------------------------
+
+source, destination : rank ids within the communicator
+tag: identifying the type of message
+
+count: number of elements(not bytes)
+datatye: type of elements; allows heterogenous machine communication
+buffer: contains data itself
+---------------------------------------------------------------------------
+Point-to-point: MPI_Send and MPI_Recv
+
+int MPI_Send(const void* buf, int count, MPI_Datatype datatype,
+            int dest, int tag, MPI_Comm comm);
+int MPI_Recv(void* buf, int count, MPI_Datatype datatype,
+            int source, int tag, MPI_Comm comm, MPI_Status *status);
+An MPI_Recv matches a message sent by MPI_Send only if comm, tag,source and dest match
+For MPI_Recv:
+* The count variable is the maximum size that can be received, message can be smaller
+* The size of the actual message can be retrived with MPI_Probe or from the status
+* The tag can be set to the wildcard MPI_ANY_TAG
+* source can be set to the wildcard MPI_ANY_SOURCE
+* status can be used to retrieve source and tag in case of wildcard usage;
+MPI_STATUS_IGNORE can be used if the status is not needed.
+--------------------------------------------------------------------------
+MPI_Datatype
+
+-------------------------------------------------
+MPI_Datatype               | C type
+-------------------------------------------------
+MPI_CHAR                   | short int           
+-------------------------------------------------
+MPI_SHORT
+MPI_INT
+MPI_LONG
+MPI_LONG_LONG_INT
+MPI_LONG_LONG
+MPI_SIGNED_CHAR
+MPI_UNSIGNED_CHAR
+MPI_UNSIGNED_SHORT
+MPI_UNSIGNED_INT
+MPI_UNSIGNED_LONG
+MPI_UNSIGNED_LONG_LONG
+MPI_FLOAT
+MPI_DOUBLE
+MPI_LONG_DOUBLE
+MPI_BYTE
+MPI_PACKED
+
+* MPI does not perform type conversion(e.g. float to int)
+* MPI performs representation conversion(e.g. little endian to big endian) when possible
+* MPI allows you define custom datatypes
+---------------------------------------------------------------------------
+MPI_Send: Communication modes
+
+MPI_Send is blocking: The buffer can be reused directly after the function returns. There are several communication modes, called from the following functions:
+* MPI_Rsend: "Ready send": Can only be called if a matching recv is ready posted(user responsibility)
+* MPI_Ssend: "Synchronous send": Will return only once a matching recv has been posted and started to receive the message.
+* MPI_Bsend: "buffered send": Stores the message in a buffer and returns immediately. See MPI_Buffer_attach to allocate buffer for MPI.
+* MPI_Send: "standard send": for small messages, buffered send; for large messages, synchronous send.
+* Prefer non-buffered sends to avoid unnecessary copies.
+Note: These functions all have the same signature.
+---------------------------------------------------------------------------
+Blocking collective communications
+
+Some very common collective operations have been implemented in MPI
+
+These operations include:
+* Reduce
+* AllReduce
+* Broadcast
+* Gather
+* AllGather
+* Scatter
+* Barrier
+* AllToAll("complete exchange")
+* Scan
+* ExScan
+* Reduce_Scatter
+They involve all ranks of a same communicator and therefore must be called by all the ranks of the concerned communicator
+Blocing here means the operation is completed for the process once the function returns.
+
+---------------------------------------------------------------------------
+Reduction
+
+int MPI_Reduce(const void* sendbuf, void* recvbuf, int count,
+            MPI_Datatype datatype, MPI_Op op, int root, MPI_Comm comm);
+* sendbuf: input data to reduce
+* recvbuf: output result(only for root)
+* count: number of elements (per process) to reduce
+* datatype: type of element to reduce
+* op: operation to operate
+* root: The rank id to which the result is output
+* comm: communicator, must contain participating ranks
+* Data can be reduced in place to save memory, in which case recvbuf is input-output and sendbuf should be set to MPI_IN_PLACE
+-------------------------------------------------------------------
+Reduction operations
+MPI implementS a few basic operations:
+---------------------------------------------------------------------
+MPI_Op                     | Operation
+---------------------------------------------------------------------
+MPI_MAX
+MPI_MIN
+MPI_SUM
+MPI_PROD
+MPI_LAND
+MPI_BAND
+MPI_LOR
+MPI_BOR
+MPI_LXOR                    logical exclusive or (xor)
+MPI_BXOR                    bit-wise exclusive or(xor)
+MPI_MAXLOC                   max value and location
+MPI_MINLOC                  min value and location
+* You can define a custom operation using MPI_OP_CREATE
+* The operation must be associative
+* The operation can commutative but not required by the standard; this may allow more efficient reductions
+* MPI defines more data types of the form MPI_X_INT : X = FLOAT, DOUBLE, INT... This allows us to use the MPI_MINLOC and MPI_MAXLOC operations
+
+---------------------------------------------------------------------------
+Barrier
+A barrier synchronizes all process in a communicator
+The function returns after all process have entered the call
+
+int MPI_Barrier(MPI_Comm comm);
+* all threads in the communicator MUST call the barrier, Otherwise this creates a deadlock.
+--------------------------------------------------------------------------
+Broadcast
+A broadcast sends data from the root rank to all ranks in the communicator
+
+int MPI_Bcast(void* buffer, int cout, MPI_Datatype datatype, int root, MPI_Comm comm);
+
+---------------------------------------------------------------------------
+Scatter
+send different data from the root rank to all ranks in the communicator
+
+int MPI_Scatter(const void* sendbuf, int sendcount, MPI_Datatype sendtype,
+                void* recvbuf, int recvcount, MPI_Datatype recvtype, 
+                int root, MPI_Comm comm);
+* sendbuf, sendcount, sendtype: Only significant to root
+* sendcount: Number of element sent to each process
+---------------------------------------------------------------------------
+Gather
+collect data from all ranks in the communicator to the root rank 
+int MPI_Gather(const void* sendbuf, int sendcount, MPI_Datatype sendtype,
+            void* recvbuf, int recvcount, MPI_Datatype recvtype, int root,
+            MPI_Comm comm);
+* recvbuf, recvcount, recvtype Only significant to root
+* recvcount: Number of element for a single receive
+--------------------------------------------------------------------------
+AllGather 
+same as Gather but all ranks have the same result
+int MPI_Allgather(const void* sendbuf, int sendcount,
+                MPI_Datatype sendtype, void* recvbuf, int recvcount,
+                MPI_Datatype recvtype, MPI_Comm comm);
+* recvCount: Number of element for a single receive
+--------------------------------------------------------------------------
+Alltoall
+Shuffle the data between ranks: acts like a transpose
+int MPI_Alltoall(const void* sendbuf, int sendcount,
+                MPI_Datatype sendtype, void* recvbuf, int recvcount,
+                MPI_Datatype recvtype, MPI_Comm comm);
+
+* Can be seen as an extension of AllGather, except that each rank has different data
+* on rank i, output j is input i of rank j
+---------------------------------------------------------------------------
+AllReduce
+Reduce the data, result is broadcast to all ranks
+int MPI_Allreduce(const void* sendbuf, void* recvbuf, int count,
+                MPI_Datatype datatype, MPI_Op op, MPI_Comm comm);
+---------------------------------------------------------------------------
+Scan
+Perform an inclusive prefix reduction
+int MPI_Scan(const void* sendbuf, void* recvbuf, int count,
+            MPI_Datatype datatype, MPI_Op op, MPI_Comm comm);
+---------------------------------------------------------------------------
+ExScan
+Perform an exclusive prefix reduction
+int MPI_Exscan(const void* sendbuf, void* recvbuf, int count,
+                MPI_Datatype datatype, MPI_Op op, MPI_Comm comm);
+Same as scan, excepts that we do not count the local data
+---------------------------------------------------------------------------
+* Point-to-point communication is a building block for more involved communication patterns, but it is all you need in principle.
+---------------------------------------------------------------------------
+Unknown size messages
+What if we don't know the size of the message on the receive side in advance?
+
+std::vector<double> message;
+
+if(rank == 0){
+    message.resize(rand() % 2048, 42.0);
+    int size = message.size();
+    MPI_Send(&size, 1, MPI_INT, 1, tag, MPI_COMM_WORLD);
+    MPI_Send(message.data(), message.size(), MPI_DOUBLE, 1, tag, MPI_COMM_WORLD);
+}
+else if (rank == 1){
+    int size;
+    MPI_Recv(&size, 1, MPI_INT, 0, tag, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+    message.resize(size);
+    MPI_Recv(message.data(), message.size(), MPI_DOUBLE, 0, tag, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+    printf("Rank %d received %d doubles\n", rank, size);
+
+}
+
+// But the solution problem creates two messages(which means create overhead!)
+// Unknown size messages: MPI_Probe to the rescue
+int MPI_Probe(int source, int tag, MPI_Comm comm, MPI_Status* status)
+// Obtain the status of a matching message as if it was obtained from MPI_Recv
+
+std::vector<double> message;
+if(rank == 0){
+    message.resize(rand() % 2048, 42.0);
+    MPI_Send(message.data(), message.size(), MPI_DOUBLE, 1, tag, MPI_COMM_WORLD);
+} else if (rank == 1){
+    int size;
+    MPI_Status status;
+    MPI_Probe(0, tag, MPI_COMM_WORLD, &status);
+    MPI_Get_count(&status, MPI_DOUBLE, &size);
+    message.resize(size);
+    MPI_Recv(message.data(), message.size(), MPI_DOUBLE, 0, tag, MPI_COMM_WORLD, MPI_STATUS_IGNORE)
+    printf("Rank %d receive %d doubles\n", rank, size);
+}
+// Above solution has only one message: less overhead
+---------------------------------------------------------------------------
+Cycle communication
+Must be aware of deadlocks:
+* send from even to odd
+* send from odd to even
+
+std::vector<double> msg(n, (double) rank, lmsg(n));
+
+int next = (rank + 1) % size;
+int prev = (rank + size -1 ) % size;
+
+if (rank % 2 == 0){
+    MPI_send(msg.data(), msg.size(), MPI_DOUBLE, next, tag, MPI_COMM_WORLD);
+    MPI_Recv(lmsg.data(), lmsg.size(), MPI_DOUBLE, prev, tag, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+}
+else {
+    MPI_Recv(lmsg.data(), lmsg.size(), MPI_DOUBLE, prev, tag, MPI_COMM_WORLD,MPI_STATUS_IGNORE);
+    MPI_Send(msg.data(), msg.size(), MPI_DOUBLE, next, tag, MPI_COMM_WORLD);
+}
+
+# Cycle communication: MPI_Sendrecv
+int MPI_Sendrecv(const void* sendbuf, int sendcount, MPI_Datatype sendtype,
+                int dest, int sendtag, void* recvbuf, int recvcount, MPI_Datatype recvtype, int source, int recvtag, MPI_Comm comm, MPI_Status* status);// Automatically takes care of deadlocks for you, this is just a convenience// tool
+std::vector<double> msg(n, (double) rank), lmsg(n);
+
+int next = (rank + 1) % size;
+int prev = (rank + size -1) % size;
+
+MPI_Sendrecv(msg.data(), msg.size(), MPI_DOUBLE, next, tag,
+            lmsg.data(), lmsg.size(), MPI_DOUBLE, prev, tag, MPI_COMM_WORLD,
+            MPI_STATUS_IGNORE);
+
+---------------------------------------------------------------------------
+Message passing protocols
+Internal implementation of MPI might use different protocols, they are not defined by the standard.
+We can distinguish 2 common protocols:
+* Eager : An asynchronous protocol that allows a send operation to complete without acknowledged from a machine receive.
+* RendezVous: A synchronous protocol which requires an acknowledgement from a matching receive order for the send operation to complete.
+---------------------------------------------------------------------------
+Eager protocol
+* send assumes that the receiver can store the message
+* It is the responsibility of the receiver  to buffer the message upon its arrival, especially if the receive operation has not been posted.
+* This assumption may be based upon the implementation's guarantee of a certain amount of available buffer space on the receive process.
+* Generally used for smaller message sizes(up to Kbytes). Message size may be limited by the number of MPI task as well.
+* Advantages:
+- Reduced synchronization delays
+- Simpler code
+* Disadvantages
+- Not scalable: Significant buffering may be required
+- memory exhaustion
+----------------------------------------------------------------------------
+RendezVous protocol
+* The sender makes no assumption about the receiver
+* Requires handshaking between sender and receiver:
+- Sender sends message envelope to receiver
+- Envelope received and stored by receiver
+- When buffer space is available, receiver replies to sender that requested data can be sent
+- Sender receives reply from receiver and then sends data
+- Destination process receives data
+* Advantages:
+- Scalable compared to eager protocol
+- Better memory management
+* Disadvantages:
+- inherent synchronization
+- more difficult to implement
+---------------------------------------------------------------------------
+Message passing protocols
+Internal implementations often use:
+- Eager protocol for small messages
+- RendezVous protocols for large messages
+---------------------------------------------------------------------------
+Bandwidth and Latency
+* Time to transmit message of size S: T = l + S / beta
+- l lantency , beta network Bandwidth
+- Network communication is much slower than main memory access
+- Ideally, we want to hide the communication: This can be done thanks to non-blocking communication.
+---------------------------------------------------------------------------
+Blocing versus Non-blocking point-to-point
+* Blocking point-to-point:
+- The data buffer can be used directly after the function returns
+- The communication is not necessarily complete(e.g. MPI_Bsend)
+* Non-Blocking point-to-point
+- The data buffer can not be used right after the function returns
+- The call returns directly, the communication might start after. Create a MPI_Request object.
+- The completion of the operation can be checked with MPI_Test
+- Can wait for completion with MPI_Wait
+* A non-blocking send can match a blocking receive (and vice-versa)
+---------------------------------------------------------------------------
+Point-to-point: MPI_Isend and MPI_Irecv
+int MPI_Isend(const void* buf, int count, MPI_Datatype datatype,
+            int dest, int tag, MPI_Comm comm, MPI_Request* request);
+int MPI_Irecv(void* buf, int count, MPI_Datatype datatype,
+            int source, int tag, MPI_Comm comm, MPI_Request* request);
+* The matching rule within a communicator is the same as for blocking versions: source, dest and tag must match
+* The buffer must not be modified until the action is completed
+* The non-blocking calls create a MPI_Request object. It helps to keep track and manage the action progress.
+* The action is completed after the request completed.
+----------------------------------------------------------------------------
+Non-Blocking point-to-point
+int MPI_Irsend(const void* buf, int count, MPI_Datatype datatype, int dest,
+            int tag, MPI_Comm comm,MPI_Request* request);
+* Returns immediately
+* Must be called only after if a matching receive is posted
+* Can reuse the buffer once the request has completed.
+
+int MPI_Issend(const void* buf, int count, MPI_Datatype datatype, int dest,
+            int tag, MPI_Comm comm, MPI_Request* request);
+* Returns immediately
+* The request is completed once a matching received started
+* Can reuse the buffer once the request has completed
+
+int MPI_Ibsend(const void* buf, int count, MPI_Datatype datatype, int dest,
+            int tag, MPI_Comm comm, MPI_Request* request);
+* Returns immediately
+* The request is completed once the buffer has been copied to the MPI internal buffer
+* See MPI_Buffer_attach to allocate buffer for MPI
+----------------------------------------------------------------------------
+Request management
+
+MPI provides an API to test and wait for a request object:
+
+int MPI_Wait(MPI_Request* request, MPI_Status* status);
+* Returns only after the request has completed and mark the request to "inactive"
+
+int MPI_Test(MPI_Request* request, int* flag, MPI_Status* status);
+* Returns flag = 1 if the operation described by request has completed, 0 otherwise. If the operation completed, set the request to "inactive"
+----------------------------------------------------------------------------
+Request management: wait multiple requests
+
+int MPI_Waitall(int count, MPI_Request array_of_requests[],
+                MPI_Status* array_of_requests);
+* Returns only after all the requests have completed and mark them to "inactive"
+
+int MPI_Waitany(int count, MPI_Request array_of_requests[], int* index
+                MPI_Status* array_of_statuses);
+* Returns only after any active request has completed, and mark the request to "inactive". Output index is the corresponding index in the input array
+
+int MPI_Waitsome(int incount, MPI_Request array_of_requests[],
+                int* outcount, int array_of_indices[],
+                MPI_Status array_of_statuses[]);
+* Returns only after at least one active request has completed. Returns the array or corresponding indices of size outcount. Mark the request(s) to "inactive"
+---------------------------------------------------------------------------
+Request management: test multiple requests
+
+int MPI_Testall(int count, MPI_Request array_of_requests[],
+                int* flag, MPI_Status array_of_requests[]);
+* Test if all the requests have completed and mark them to "inactive"
+
+int MPI_Testany(int count, MPI_Request array_of_requests[],
+                int* index, int* flag, MPI_Status* status);
+* Test if any active request has complete, and mark the request to "inactive". Output index is the corresponding index in the input array.
+
+int MPI_Testsome(int incount, MPI_Request array_of_requests[],
+                int* outcount, int array_of_indices[],
+                MPI_Status array_of_statuses[]);
+* Test if at least one active requests has completed. Returns the array or corresponding indices of size outcount. Mark the request(s) to "inactive".

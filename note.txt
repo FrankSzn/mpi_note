@@ -1,0 +1,81 @@
+Level 1 BLAS routines:
+_asum: sum of absolute values
+_axpy: general vector add
+_dot: dot product
+_nrm2: euclidean norm
+_amin: argument of minimum
+_amax: argument of maximum
+_swap: swap 2 arrays
+_copy: copy one array to the other
+_scal: y <- ay
+
+Number type:
+i integer
+s single precision real
+d double precision real
+c single precision complex
+z double precision complex
+
+Operation
+axpy vector addition
+dot dot product
+mm matrix-matrix multiplication
+mv matrix-vector multiplication
+sum, nrm2, ...
+
+Level 2 and 3: Matrix form
+ge dense
+gb banded
+tr triangle
+sy, he symmetric / hermitian 
+sb, hb symmetric / hermitian banded
+sp, hp symmetric / hermitian packed
+
+Different matrix forms:
+different algorithms
+smaller memory footprint
+better use of cache
+
+saxpy dgemv
+
+float cblas_sdot(const int n, const float* x, const int incx, const float* y, const int incy);
+float *x, *y;
+...
+float dot = cblas_sdot(n, x, 1, y, 1);
+
+BLAS uses column major convention!
+CBlas API accepts layout argument
+
+Matrix Operations accept three size arguments:
+* M: number of rows
+* N: number of columns
+* LDA: leading dimension: increment between columns(column major) / rows(row major)
+
+void cblas_sgbmv(const CBLAS_LAYOUT Layout, const CBLAS_TRANPOSE trans,
+                 const int m, const int n, const int kl, const int ku,
+                 const flost alpha, const float* a, const int lda,
+                 const float* x, const int incx,
+                 const float beta, float* y, const int incy);
+
+
+Packed format: Symmetric, Hermitian, or triangular matrices
+void cblas_sspmv(const CBLAS_LAYOUT Layout, const CBLAS_UPLO uplo,
+                const int n, const float alpha, const float* ap,
+                const float* x, int incx, const float beta, float* y,
+                const int incy);
+
+Transpose arguments
+* BLAS Level 2: routines takes one argument TRANS indicating if the input matrix is transposed
+* BLAS Level 3: take one or more transpose argument
+
+TRANS      |    real matrices s,d      |  complex matrices c, z
+---------------------------------------------------------------------------
+'N' or 'n' |    no transpose           |    no transpose
+---------------------------------------------------------------------------
+'T' or 't' |    transposed             |    transposed
+--------------------------------------------------------------------------
+'C' or 'c' |    transposed             |    transposed and complex conjugate--------------------------------------------------------------------------
+
+
+BLAS routines: Operational Intensity
+Assume infinite cache, single precision
